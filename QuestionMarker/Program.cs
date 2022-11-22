@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace QuestionMarker // Note: actual namespace depends on the project name.
+﻿namespace QuestionMarker
 {
     internal class Program
     {
@@ -25,10 +23,9 @@ namespace QuestionMarker // Note: actual namespace depends on the project name.
 
         static void Main(string[] args)
         {
-            var parse = new Parse(true, Logger("${level} ${message} ${exception}"));
-            var path = @"C:\Projects\DIGISteel.new\build@digisteel-services-model\Digisteel.Model.SharedKernel\DTOs\Results\Queries\ModelInformation\ModelInformationResultsDto.cs";
-            parse.ReadFile(path, new List<string>());
-            parse.Finalise(new List<string>());
+            var parse = new Parse(false, Logger("${level} ${message} ${exception}"));
+            var path = @"C:\Projects\GitHub\QuestionMarker\ModelInformationResultsDto.cs";
+            parse.Read(path);
         }
     }
 }

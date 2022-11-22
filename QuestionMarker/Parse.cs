@@ -10,85 +10,89 @@ namespace QuestionMarker
     using Microsoft.CodeAnalysis.CSharp;
 
     using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
 
     public class Parse
     {
-        private readonly NLog.ILogger _logger; 
-
-        private readonly Dictionary<string, IEnumerable<string>> _csfiles = new Dictionary<string, IEnumerable<string>>();
+        private readonly NLog.ILogger _logger;
 
         private readonly bool _writeAST;
 
-        private readonly Dictionary<string, SyntaxTree> _map = new Dictionary<string, SyntaxTree>();
+        private readonly List<PortableExecutableReference> _libs = new();
 
-        private readonly List<SyntaxTree> _trees = new List<SyntaxTree>();
+        private readonly string _enable = "#nullable enable\n";
 
-        private readonly List<PortableExecutableReference> _libs = new List<PortableExecutableReference>();
+        private string? _filePath;
+
+        private string? _source;
+
+        private SyntaxTree? _tree;
 
         public Parse(bool writeAST, NLog.ILogger logger)
         {
             _logger = logger;
             _writeAST = writeAST;
+            _libs.Add(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
         }
 
-        public void ReadFile(string fileName, IEnumerable<string> compileDefinitions)
+        public void Read(string path)
         {
-            _csfiles[fileName] = compileDefinitions;
+            _filePath = path;
+            CreateTrees();
+            Process();
         }
 
         private void CreateTrees()
         {
-            foreach (var csfile in _csfiles)
-            {
-                var options = new CSharpParseOptions(LanguageVersion.Default, DocumentationMode.Parse, SourceCodeKind.Regular, csfile.Value);
-                var contents = System.IO.File.ReadAllText(csfile.Key);
-                var tree = CSharpSyntaxTree.ParseText(contents, options, csfile.Key);
-                _trees.Add(tree);
-                _map[csfile.Key] = tree;
-            }
-        }
-
-        private void References(List<string> dlls)
-        {
-            for (int i = 0; i < dlls.Count; ++i)
-            {
-                _libs.Add(MetadataReference.CreateFromFile(dlls[i]));
-            }
-
-            _libs.Add(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
+            var options = new CSharpParseOptions(LanguageVersion.CSharp8, DocumentationMode.Parse, SourceCodeKind.Regular, new List<string>());
+            _source = System.IO.File.ReadAllText(_filePath);
+            var contents = _enable + _source;
+            _tree = CSharpSyntaxTree.ParseText(contents, options, _filePath);
         }
 
         private void Process()
         {
-            var compilation = CSharpCompilation.Create("Compilation", syntaxTrees: _trees, references: _libs);
+            var codes = new List<string> { "CS8618", "CS8625" };
+            var compilation = CSharpCompilation.Create("Compilation", syntaxTrees: new List<SyntaxTree> { _tree }, references: _libs);
             var diags = compilation.GetDiagnostics();
+            var nullables = new List<Diagnostic>();
             foreach (var diag in diags)
             {
-                _logger.Debug(diag.ToString());
+                if (codes.Contains(diag.Id))
+                {
+                    nullables.Add(diag);
+                    _logger.Debug(diag.ToString());
+                }
             }
 
-            foreach (var csfile in _map.Keys)
+            if (_writeAST)
             {
-                var tree = _map[csfile];
-                var model = compilation.GetSemanticModel(tree);
-
-                if (_writeAST)
-                {
-                    Printer.Process(tree, csfile, model, _logger);
-                }
-                else
-                {
-                }
+                var model = compilation.GetSemanticModel(_tree);
+                Printer.Process(_tree, _filePath, model, _logger);
             }
-        }
+            else
+            {
+                if (!nullables.Any())
+                    return;
 
-        public void Finalise(List<string> dlls)
-        {
-            CreateTrees();
+                var ordered = new List<int>();
+                foreach (var diag in nullables)
+                {
+                    ordered.Add(diag.Location.SourceSpan.Start);
+                }
 
-            References(dlls);
+                ordered.Sort();
+                ordered.Reverse();
 
-            Process();
+                foreach (var loc in ordered)
+                {
+                    var index = loc - _enable.Length - 1;
+                    _source = _source.Insert(index, "?");
+                }
+
+                File.WriteAllText(_filePath, _source);
+            }
         }
     }
 }
