@@ -21,13 +21,9 @@ namespace QuestionMarker
 
         private readonly List<PortableExecutableReference> _libs = new();
 
+        private readonly CSharpParseOptions _options = new CSharpParseOptions(LanguageVersion.CSharp8, DocumentationMode.Parse, SourceCodeKind.Regular, new List<string>());
+
         private readonly string _enable = "#nullable enable\n";
-
-        private string? _filePath;
-
-        private string? _source;
-
-        private SyntaxTree? _tree;
 
         public Parse(bool writeAST, NLog.ILogger logger)
         {
@@ -36,25 +32,13 @@ namespace QuestionMarker
             _libs.Add(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
         }
 
-        public void Read(string path)
+        public void Process(string filePath)
         {
-            _filePath = path;
-            CreateTrees();
-            Process();
-        }
-
-        private void CreateTrees()
-        {
-            var options = new CSharpParseOptions(LanguageVersion.CSharp8, DocumentationMode.Parse, SourceCodeKind.Regular, new List<string>());
-            _source = System.IO.File.ReadAllText(_filePath);
-            var contents = _enable + _source;
-            _tree = CSharpSyntaxTree.ParseText(contents, options, _filePath);
-        }
-
-        private void Process()
-        {
+            var source = File.ReadAllText(filePath!);
+            var contents = _enable + source;
+            var tree = CSharpSyntaxTree.ParseText(contents, _options, filePath);
             var codes = new List<string> { "CS8618", "CS8625" };
-            var compilation = CSharpCompilation.Create("Compilation", syntaxTrees: new List<SyntaxTree> { _tree }, references: _libs);
+            var compilation = CSharpCompilation.Create("Compilation", syntaxTrees: new List<SyntaxTree> { tree! }, references: _libs);
             var diags = compilation.GetDiagnostics();
             var nullables = new List<Diagnostic>();
             foreach (var diag in diags)
@@ -68,8 +52,8 @@ namespace QuestionMarker
 
             if (_writeAST)
             {
-                var model = compilation.GetSemanticModel(_tree);
-                Printer.Process(_tree, _filePath, model, _logger);
+                var model = compilation.GetSemanticModel(tree!);
+                Printer.Process(tree!, filePath, model, _logger);
             }
             else
             {
@@ -87,11 +71,10 @@ namespace QuestionMarker
 
                 foreach (var loc in ordered)
                 {
-                    var index = loc - _enable.Length - 1;
-                    _source = _source.Insert(index, "?");
+                    contents = contents.Insert(loc - 1, "?");
                 }
 
-                File.WriteAllText(_filePath, _source);
+                File.WriteAllText(filePath, source[_enable.Length..]);
             }
         }
     }

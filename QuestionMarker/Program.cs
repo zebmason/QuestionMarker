@@ -1,4 +1,6 @@
-﻿namespace QuestionMarker
+﻿using System.IO;
+
+namespace QuestionMarker
 {
     internal class Program
     {
@@ -21,11 +23,30 @@
             return logger;
         }
 
+        static void Recurse(string path, Parse parse)
+        {
+            foreach (var fileName in Directory.GetFiles(path))
+            {
+                if (Path.GetExtension(fileName) != ".cs")
+                    continue;
+
+                System.Console.WriteLine(fileName);
+                parse.Process(fileName);
+            }
+
+            foreach (var direc in Directory.GetDirectories(path))
+            {
+                if (Path.GetFileName(path) == "obj")
+                    continue;
+
+                Recurse(direc, parse);
+            }
+        }
+
         static void Main(string[] args)
         {
             var parse = new Parse(false, Logger("${level} ${message} ${exception}"));
-            var path = @"C:\Projects\GitHub\QuestionMarker\ModelInformationResultsDto.cs";
-            parse.Read(path);
+            Recurse(args[0], parse);
         }
     }
 }
