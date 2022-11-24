@@ -37,7 +37,7 @@ namespace QuestionMarker
             var source = File.ReadAllText(filePath!);
             var contents = _enable + source;
             var tree = CSharpSyntaxTree.ParseText(contents, _options, filePath);
-            var codes = new List<string> { "CS8618", "CS8625" };
+            var codes = new List<string> { "CS8618", "CS8625", "CS8714" };
             var compilation = CSharpCompilation.Create("Compilation", syntaxTrees: new List<SyntaxTree> { tree! }, references: _libs);
             var diags = compilation.GetDiagnostics();
             var nullables = new List<Diagnostic>();
@@ -45,6 +45,12 @@ namespace QuestionMarker
             {
                 if (codes.Contains(diag.Id))
                 {
+#if false
+                    var message = diag.GetMessage();
+                    if (message.Contains("must contain a non-null value when exiting constructor. Consider declaring the property as nullable."))
+                        continue;
+#endif
+
                     nullables.Add(diag);
                     _logger.Debug(diag.ToString());
                 }
@@ -74,7 +80,7 @@ namespace QuestionMarker
                     contents = contents.Insert(loc - 1, "?");
                 }
 
-                File.WriteAllText(filePath, source[_enable.Length..]);
+                File.WriteAllText(filePath, contents[_enable.Length..]);
             }
         }
     }
